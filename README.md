@@ -2,7 +2,7 @@
 
 ## Files used for customized initial state
 
-Model running script: [benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py](/root/autodl-tmp/mamba/benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py)
+1. Model running script: [benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py](/root/autodl-tmp/mamba/benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py)
 
 
 ```python
