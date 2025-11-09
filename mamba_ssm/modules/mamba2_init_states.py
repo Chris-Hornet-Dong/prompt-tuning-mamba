@@ -56,7 +56,7 @@ class Mamba2(nn.Module):
         # Fused kernel and sharding options
         chunk_size=256,
         use_mem_eff_path=True,
-        layer_idx=None,  # Absorb kwarg for general module
+        layer_idx=None,  # 从kwarg中获取layer_idx
         process_group=None,
         sequence_parallel=True,
         device=None,
@@ -88,6 +88,7 @@ class Mamba2(nn.Module):
         self.activation = "silu"
         self.chunk_size = chunk_size
         self.use_mem_eff_path = use_mem_eff_path
+        #记录使用自定义初态的 layer_idx
         self.layer_idx = layer_idx
 
         # Order: [z, x, B, C, dt]
@@ -162,7 +163,7 @@ class Mamba2(nn.Module):
         seq_idx=None,
         cu_seqlens=None,
         inference_params=None,
-        initial_states=None,
+        initial_states=None, #增加的initial_states参数
         initial_states_by_layer=None,  # 用于确定使用 custom initial state 的 block 是哪个
         debug_mark_init: bool = False,
     ):
@@ -185,6 +186,7 @@ class Mamba2(nn.Module):
         resolved_initial_states = None
         if initial_states_by_layer is not None:
             try:
+                #resolver initial states 同时记录layer idx和初态类型
                 resolved_initial_states = initial_states_by_layer.get(self.layer_idx, None)
             except Exception:
                 resolved_initial_states = None

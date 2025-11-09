@@ -84,12 +84,15 @@ if is_mamba and args.use_custom_init_state:
         headdim = target_mamba2_layer.headdim
         d_state = target_mamba2_layer.d_state
 
+
+        #使用随即张量作为custom initial state,用于展示
         custom_initial_state = torch.randn(
             args.batch, nheads, headdim, d_state, device=device, dtype=dtype
         )
 
         layer_idx = getattr(target_mamba2_layer, "layer_idx", None)
         if layer_idx is not None:
+            #传入custom initial state参数,同时传入layer_idx来标记哪层使用custom initial state
             mixer_kwargs["initial_states_by_layer"] = {layer_idx: custom_initial_state}
             print(f"Custom initial state created for layer {layer_idx} with shape: {custom_initial_state.shape}")
         else:

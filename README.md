@@ -51,3 +51,17 @@ use "--use-custom-init-state" flag to decide whether a custom initial state is u
 ```sh
 python benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py --model-name "state-spaces/mamba2-2.7b" --prompt "Hello" --topp 0.9 --temperature 0.7 --repetition-penalty 1.2 --use-custom-init-state
 ```
+
+- 增加 —debug-init-state开关，用于打印每一层使用的初态信息
+- 最初设计是为了检测初态是否只传给了第一个mamba2 block
+
+```sh
+python benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py --model-name "state-spaces/mamba2-2.7b" --prompt "Hello" --topp 0.9 --temperature 0.7 --repetition-penalty 1.2 --use-custom-init-state --debug-init-state
+```
+
+- 增加—init-state-layer开关，用于决定传入自定义向量的层是哪层。
+- 对于mamba2-2.7b模型来说，一共64层mamba2 block，index从0-63
+
+```sh
+python benchmarks/benchmark_generation_mamba_simple_mamba2_init_state.py --model-name "state-spaces/mamba2-2.7b" --prompt "Hello" --topp 0.9 --temperature 0.7 --repetition-penalty 1.2 --use-custom-init-state --debug-init-state --init-state-layer 63
+```
