@@ -163,7 +163,8 @@ class Mamba2(nn.Module):
         cu_seqlens=None,
         inference_params=None,
         initial_states=None,
-        initial_states_by_layer=None,#用于确定使用custom initial state的block是哪个
+        initial_states_by_layer=None,  # 用于确定使用 custom initial state 的 block 是哪个
+        debug_mark_init: bool = False,
     ):
         """
         u: (batch, seqlen, hidden_dim) if seqlen=None.
@@ -180,11 +181,39 @@ class Mamba2(nn.Module):
             batch = batch_seqlen // seqlen
 
         conv_state, ssm_state = None, None
+        # 解析按层初始状态（若未提供映射则回退到全局 initial_states）
+        resolved_initial_states = None
+        if initial_states_by_layer is not None:
+            try:
+                resolved_initial_states = initial_states_by_layer.get(self.layer_idx, None)
+            except Exception:
+                resolved_initial_states = None
+        else:
+            resolved_initial_states = initial_states
         if inference_params is not None:
             inference_batch = cu_seqlens.shape[0] - 1 if cu_seqlens is not None else batch
             conv_state, ssm_state = self._get_states_from_cache(inference_params, inference_batch)
-            if initial_states is not None and inference_params.seqlen_offset == 0:
-                ssm_state.copy_(initial_states)
+            if resolved_initial_states is not None and inference_params.seqlen_offset == 0:
+                ssm_state.copy_(resolved_initial_states)
+            # 在 prefill 时记录该层初态类型（仅当开启调试开关）
+            if debug_mark_init and inference_params.seqlen_offset == 0:
+                try:
+                    if not hasattr(inference_params, "debug_init_applied"):
+                        inference_params.debug_init_applied = {}
+                    init_sum = float(resolved_initial_states.float().sum().item()) if resolved_initial_states is not None else 0.0
+                    inference_params.debug_init_applied[self.layer_idx] = {
+                        "kind": "custom" if resolved_initial_states is not None else "zero",
+                        "init_sum": init_sum,
+                    }
+                    # 同步到层对象
+                    self._init_state_debug = {
+                        "layer_idx": self.layer_idx,
+                        "kind": "custom" if resolved_initial_states is not None else "zero",
+                        "init_sum": init_sum,
+                        "shape": (batch, self.nheads, self.headdim, self.d_state),
+                    }
+                except Exception:
+                    pass
 
             if inference_params.seqlen_offset > 0:
                 # The states are updated inplace
@@ -197,6 +226,15 @@ class Mamba2(nn.Module):
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         A = -torch.exp(self.A_log.float())  # (nheads) or (d_inner, d_state)
         dt_limit_kwargs = {} if self.dt_limit == (0.0, float("inf")) else dict(dt_limit=self.dt_limit)
+        # 在非增量路径 (inference_params is None) 的首次调用也记录初态
+        if debug_mark_init and inference_params is None and not hasattr(self, "_init_state_debug"):
+            init_sum = float(resolved_initial_states.float().sum().item()) if resolved_initial_states is not None else 0.0
+            self._init_state_debug = {
+                "layer_idx": self.layer_idx,
+                "kind": "custom" if resolved_initial_states is not None else "zero",
+                "init_sum": init_sum,
+                "shape": (batch, self.nheads, self.headdim, self.d_state),
+            }
         if self.use_mem_eff_path and inference_params is None:
             out = mamba_split_conv1d_scan_combined(
                 zxbcdt,
@@ -218,9 +256,8 @@ class Mamba2(nn.Module):
 
 
 
-                #为 split_conv1d_scan_combined 添加 initial_states 参数
-
-                initial_states=initial_states,
+                # 为 split_conv1d_scan_combined 添加 initial_states 参数（使用解析后的 per-layer 初态）
+                initial_states=resolved_initial_states,
                 **dt_limit_kwargs,
             )
             if seqlen_og is not None:
@@ -276,10 +313,8 @@ class Mamba2(nn.Module):
                 cu_seqlens=cu_seqlens,
 
 
-                #为 chunk_scan_combined 添加 initial_states 参数
-
-
-                initial_states=initial_states,
+                # 为 chunk_scan_combined 添加 initial_states 参数（使用解析后的 per-layer 初态）
+                initial_states=resolved_initial_states,
                 **dt_limit_kwargs,
                 return_final_states=ssm_state is not None,
                 return_varlen_states=cu_seqlens is not None and inference_params is not None,
